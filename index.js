@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 
 // 구글 Apps Script 웹 앱 URL 적용 완료
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzceqt5UUTWB8eAQ3jp8azewjA5RnlLWr_1TnEa60BljF6ThnRXmQTjkjQmcR61yMyO/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx12xXDaTkocThQinpDswVrc6Z3UfIkLDVIJSjKs-VgheRpHp6bJSU4E_yyrfijz30K/exec';
 
 app.post('/', async (req, res) => {
   const userMessage = req.body.userRequest ? req.body.userRequest.utterance : "";
