@@ -1,59 +1,60 @@
 const express = require('express');
-const axios = require('axios'); // 외부 시트 데이터를 읽기 위한 라이브러리
+const axios = require('axios');
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// 구글 Apps Script 웹 앱 URL 적용 완료
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbza-8PWxMDCYXdpdwzgw5ydrdSe1YIH_fKcTSuc-kBTrTxHXuoehLgm5PVb8zcM6WIh/exec';
+const GOOGLE_SHEET_URL = '여기에_웹앱_URL을_넣어주세요'; // 기존에 쓰시던 URL 그대로 두셔도 됩니다!
 
 app.post('/', async (req, res) => {
-  const userMessage = req.body.userRequest ? req.body.userRequest.utterance : "";
-  let answerText = "해당 제품의 재고 정보를 찾지 못했습니다. 제품 코드를 다시 확인해 주세요.";
+    const userMessage = req.body.userRequest ? req.body.userRequest.utterance : "";
+    let answerText = "해당 제품의 재고 정보를 찾지 못했습니다. 제품 코드를 다시 확인해 주세요.";
 
-  try {
-    // 1. 구글 시트에서 실시간 재고 데이터 가져오기
-    const sheetResponse = await axios.get(GOOGLE_SHEET_URL);
-    const inventoryData = sheetResponse.data; // { "BC05": 15, "BC10": 8, ... } 형태
-
-    // 2. 사용자가 말한 메시지에서 제품 코드 찾기 (시트에 있는 코드 중 메시지에 포함된 것 검색)
-    let foundCode = null;
-    for (const code of Object.keys(inventoryData)) {
-      if (userMessage.includes(code)) {
-        foundCode = code;
-        break;
-      }
-    }
-
-    // 3. 찾은 제품에 따라 답변 구성
-    if (foundCode) {
-      const qty = inventoryData[foundCode];
-      answerText = `${foundCode} 제품의 현재 남은 재고는 ${qty}개입니다.`;
-    } else if (userMessage.includes("재고")) {
-      answerText = "조회하실 제품 코드(예: BC05, BC10 등)를 함께 말씀해 주세요!";
-    }
-
-  } catch (error) {
-    console.error("구글 시트 연동 에러:", error);
-    answerText = "죄송합니다. 현재 재고 정보를 불러오는 중에 문제가 발생했습니다.";
-  }
-
-  const responseBody = {
-    version: "2.0",
-    template: {
-      outputs: [
-        {
-          simpleText: {
-            text: answerText
-          }
+    try {
+        const sheetResponse = await axios.get(GOOGLE_SHEET_URL);
+        const inventoryData = sheetResponse.data; // { "BC05": 1123, "AB2XS": 23, ... } 형태
+        
+        let foundCode = null;
+        
+        // [핵심 개선] 긴 제품 코드부터 먼저 검사하도록 정렬 (예: BC05J, AB2XS 등을 BC05보다 먼저 비교)
+        const sortedCodes = Object.keys(inventoryData).sort((a, b) => b.length - a.length);
+        
+        for (const code of sortedCodes) {
+            // 대소문자 구분 없이 사용자가 입력한 문장에 해당 제품 코드가 독립된 단어로 포함되어 있는지 확인
+            const regex = new RegExp(code, 'i');
+            if (regex.test(userMessage)) {
+                foundCode = code;
+                break;
+            }
         }
-      ]
+
+        if (foundCode) {
+            const qty = inventoryData[foundCode];
+            answerText = `${foundCode} 제품의 현재 남은 재고는 ${qty}개입니다.`;
+        } else if (userMessage.includes("재고")) {
+            answerText = "조회하실 제품 코드(예: AB2XS, BC05 등)를 정확히 함께 말씀해 주세요!";
+        }
+
+    } catch (error) {
+        console.error(error);
+        answerText = "재고 정보를 불러오는 중 오류가 발생했습니다.";
     }
-  };
-  res.json(responseBody);
+
+    res.json({
+        version: "2.0",
+        template: {
+            outputs: [
+                {
+                    simpleText: {
+                        text: answerText
+                    }
+                }
+            ]
+        }
+    });
 });
 
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+    console.log(`Server is running on port ${port}`);
 });
