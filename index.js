@@ -5,7 +5,7 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-const GOOGLE_SHEET_URL = '여기에_웹앱_URL을_넣어주세요'; // 기존에 쓰시던 URL 그대로 두셔도 됩니다!
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbza-8PWxMDCYXdpdwzgw5ydrdSe1YIH_fKcTSuc-kBTrTxHXuoehLgm5PVb8zcM6WIh/exec'; 
 
 app.post('/', async (req, res) => {
     const userMessage = req.body.userRequest ? req.body.userRequest.utterance : "";
