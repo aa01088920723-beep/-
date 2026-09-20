@@ -58,3 +58,7 @@ app.post('/', async (req, res) => {
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });
+// 브라우저로 직접 접속했을 때 서버 상태를 확인하기 위한 코드
+app.get('/', (req, res) => {
+  res.send('Kakao Bot Server is Running!');
+});
