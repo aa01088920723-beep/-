@@ -4,9 +4,10 @@ const app = express();
 
 app.use(express.json());
 
-const GAS_URL = '구글_앱스스크립트_웹앱_URL';
+// 구글 앱스 스크립트 웹앱 URL 반영 완료
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxlQrT-zJeNda4zbH30O_grkr23KhT0E159KKBuKQjjlJKjGLR4rL9X06kUr_SB-pXO/exec';
 
-// 1. Better Stack 핑 및 Health Check용 루트 경로 (반드시 필요)
+// 1. Better Stack 핑 및 Health Check용 루트 경로
 app.get('/', (req, res) => {
   res.status(200).send('Server is active and running!');
 });
@@ -16,7 +17,7 @@ app.post('/skill', async (req, res) => {
   try {
     const userUtterance = req.body.userRequest.utterance || '';
     
-    // 제품코드 추출 (예: BC05)
+    // 제품코드 추출 (예: BC05, bc10 등)
     const match = userUtterance.match(/[A-Za-z]{2}\d{2,4}/);
     if (!match) {
       return res.json({
