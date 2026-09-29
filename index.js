@@ -4,10 +4,10 @@ const app = express();
 
 app.use(express.json());
 
-// 구글 앱스 스크립트 웹앱 URL 반영 완료
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxlQrT-zJeNda4zbH30O_grkr23KhT0E159KKBuKQjjlJKjGLR4rL9X06kUr_SB-pXO/exec';
+// 새로 배포한 구글 앱스 크립트 웹앱 URL (재고현황 H열: 품목 / I열: 총재고 연동)
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzWX0TVR0_ZN9F-ShllRdAuMu3JsxVfxg_M79uYRkXcBaNkeX1ZIFyLSs9yKMmAl2w8/exec';
 
-// 1. Better Stack 핑 및 Health Check용 루트 경로
+// 1. Better Stack 및 Health Check 경로
 app.get('/', (req, res) => {
   res.status(200).send('Server is active and running!');
 });
@@ -17,8 +17,10 @@ app.post('/skill', async (req, res) => {
   try {
     const userUtterance = req.body.userRequest.utterance || '';
     
-    // 제품코드 추출 (예: BC05, bc10 등)
-    const match = userUtterance.match(/[A-Za-z]{2}\d{2,4}/);
+    // 사용자가 입력한 문장에서 제품 코드 추출 (공백 제거 후 영문+숫자 검색, 예: BC05, BC10JO 등)
+    const cleanUtterance = userUtterance.replace(/\s+/g, '');
+    const match = cleanUtterance.match(/[A-Za-z0-9_-]{2,15}/);
+    
     if (!match) {
       return res.json({
         version: "2.0",
@@ -28,18 +30,30 @@ app.post('/skill', async (req, res) => {
       });
     }
 
-    const itemCode = match[0].toUpperCase();
+    const searchCode = match[0].replace(/[-_]/g, '').toUpperCase();
 
-    // GAS 호출
+    // 구글 앱스 크립트(H/I열 재고 데이터) 호출
     const response = await axios.get(GAS_URL);
-    const stockData = response.data;
-    const qty = stockData[itemCode];
+    const stockData = response.data || {};
+
+    // 대소문자 및 특수문자 무시 유연 매칭
+    let foundQty = undefined;
+    let matchedItemName = searchCode;
+
+    for (const [item, qty] of Object.entries(stockData)) {
+      const normalizedItem = item.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      if (normalizedItem === searchCode) {
+        foundQty = qty;
+        matchedItemName = item;
+        break;
+      }
+    }
 
     let replyText = "";
-    if (qty !== undefined) {
-      replyText = `${itemCode} 제품의 현재 남은 재고는 ${qty}개입니다.`;
+    if (foundQty !== undefined) {
+      replyText = `[${matchedItemName}] 현재 총 재고는 ${foundQty}개입니다.`;
     } else {
-      replyText = `${itemCode} 품목 정보를 찾을 수 없습니다.`;
+      replyText = `[${searchCode}] 품목 정보를 찾을 수 없습니다.\n재고현황 시트의 H열 품목명을 확인해 주세요.`;
     }
 
     return res.json({
