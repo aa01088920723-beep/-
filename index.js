@@ -1,64 +1,74 @@
 const express = require('express');
 const axios = require('axios');
 const app = express();
-const port = process.env.PORT || 3000;
-
 app.use(express.json());
 
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbza-8PWxMDCYXdpdwzgw5ydrdSe1YIH_fKcTSuc-kBTrTxHXuoehLgm5PVb8zcM6WIh/exec'; 
+const GAS_URL = '여기에_GAS_웹앱_URL_입력';
 
-app.post('/', async (req, res) => {
-    const userMessage = req.body.userRequest ? req.body.userRequest.utterance : "";
-    let answerText = "해당 제품의 재고 정보를 찾지 못했습니다. 제품 코드를 다시 확인해 주세요.";
+// 1. 메모리 캐시 변수 선언
+let stockCache = null;
+let lastFetchTime = 0;
+const CACHE_DURATION = 2 * 60 * 1000; // 캐시 유지 시간: 2분 (필요시 조정 가능)
 
-    try {
-        const sheetResponse = await axios.get(GOOGLE_SHEET_URL);
-        const inventoryData = sheetResponse.data; // { "BC05": 1123, "AB2XS": 23, ... } 형태
-        
-        let foundCode = null;
-        
-        // [핵심 개선] 긴 제품 코드부터 먼저 검사하도록 정렬 (예: BC05J, AB2XS 등을 BC05보다 먼저 비교)
-        const sortedCodes = Object.keys(inventoryData).sort((a, b) => b.length - a.length);
-        
-        for (const code of sortedCodes) {
-            // 대소문자 구분 없이 사용자가 입력한 문장에 해당 제품 코드가 독립된 단어로 포함되어 있는지 확인
-            const regex = new RegExp(code, 'i');
-            if (regex.test(userMessage)) {
-                foundCode = code;
-                break;
-            }
-        }
+// 전체 재고 데이터를 GAS에서 가져오는 함수
+async function getStockData() {
+  const now = Date.now();
+  // 캐시가 존재하고 2분이 지나지 않았다면 구글 시트를 안 부르고 캐시 리턴!
+  if (stockCache && (now - lastFetchTime < CACHE_DURATION)) {
+    console.log('⚡ 캐시 데이터 사용 (0.01초 소요)');
+    return stockCache;
+  }
 
-        if (foundCode) {
-            const qty = inventoryData[foundCode];
-            answerText = `${foundCode} 제품의 현재 남은 재고는 ${qty}개입니다.`;
-        } else if (userMessage.includes("재고")) {
-            answerText = "조회하실 제품 코드(예: AB2XS, BC05 등)를 정확히 함께 말씀해 주세요!";
-        }
+  // 2분이 지났거나 캐시가 없으면 GAS 호출
+  console.log('🔄 구글 시트에서 최신 데이터 조회 중...');
+  const response = await axios.get(GAS_URL);
+  stockCache = response.data; // 데이터를 메모리에 저장
+  lastFetchTime = now;
+  return stockCache;
+}
 
-    } catch (error) {
-        console.error(error);
-        answerText = "재고 정보를 불러오는 중 오류가 발생했습니다.";
+app.post('/skill', async (req, res) => {
+  try {
+    const userUtterance = req.body.userRequest.utterance; // 사용자가 보낸 카톡 메시지
+    
+    // 제품코드 추출 (예: BC05)
+    const match = userUtterance.match(/[A-Za-z]{2}\d{2,4}/); // 알파벳2자리+숫자 패턴
+    if (!match) {
+      return res.json({
+        version: "2.0",
+        template: { outputs: [{ simpleText: { text: "제품 코드를 정확히 입력해주세요. (예: BC05)" } }] }
+      });
     }
 
-    res.json({
-        version: "2.0",
-        template: {
-            outputs: [
-                {
-                    simpleText: {
-                        text: answerText
-                    }
-                }
-            ]
-        }
+    const itemCode = match[0].toUpperCase();
+    const stockData = await getStockData(); // 캐시 적용된 함수 호출
+
+    // stockData 예시: { "BC05": 1123, "BC06": 500 }
+    const qty = stockData[itemCode];
+
+    let replyText = "";
+    if (qty !== undefined) {
+      replyText = `${itemCode} 제품의 현재 남은 재고는 ${qty}개입니다.`;
+    } else {
+      replyText = `${itemCode} 품목을 찾을 수 없습니다.`;
+    }
+
+    // 카카오톡 챗봇 스킬 응답 규격
+    return res.json({
+      version: "2.0",
+      template: {
+        outputs: [{ simpleText: { text: replyText } }]
+      }
     });
+
+  } catch (error) {
+    console.error(error);
+    return res.json({
+      version: "2.0",
+      template: { outputs: [{ simpleText: { text: "재고 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요." } }] }
+    });
+  }
 });
 
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-});
-// 브라우저로 직접 접속했을 때 서버 상태를 확인하기 위한 코드
-app.get('/', (req, res) => {
-  res.send('Kakao Bot Server is Running!');
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
